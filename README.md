@@ -1,8 +1,8 @@
 # Seabox
 
-Seabox is a wrapper around various `podman` commands to simplify creating Linux environments using containers. This allows you to quickly spin up different Linux distributions to install and run software in. 
+Seabox is a wrapper around various `podman` commands to simplify creating Linux environments using containers. This allows you to spin up workspaces with different Linux distributions to install and run software in, providing flexibility to create independent contexts that suit the needs of given software workflows and toolchains.
 
-Seabox is modeled after [distrobox](https://github.com/89luca89/distrobox) and [toolbx](https://github.com/containers/toolbox), allowing you to instantiate OCI images for use as standalone environments with host integration. Seabox has a couple adjuments - it uses rootful podman to run containers, is less tightly integrated with the host (such as no default mounting of host root and home directories), and has minimal container initialization.
+Seabox is modeled after [distrobox](https://github.com/89luca89/distrobox) and [toolbx](https://github.com/containers/toolbox), allowing you to instantiate OCI images for use as standalone environments with host integration. Seabox has a couple adjustments - it uses rootful podman to run containers, is less tightly integrated with the host (such as no default mounting of host root and home directories), and has minimal container initialization.
 
 ## Install
 ```sh
@@ -13,6 +13,7 @@ cargo install --git https://github.com/OBarronCS/seabox.git
 ```sh
 # Create a container
 seabox create my-dev-environment -i docker.io/dokken/ubuntu-25.04
+## The current working directory is mounted to /mount/ in the container
 
 # List containers created with seabox
 seabox ls
@@ -42,7 +43,7 @@ seabox create [options] <name>
     Example: seabox create -p "--pidfile /tmp/pidfile --cidfile /tmp/cidfile" test
 
 -r, --root
-    Use the root user in the container. Typically, seabox matches the host user to an unprivileged user in the container (creating one on entry if it doesn't exist). Passing this flag skips the initialization of such a user, and user root instead.
+    Use the root user in the container. Typically, seabox matches the host user to an unprivileged user in the container (creating one on entry if it doesn't exist). Passing this flag skips the initialization of such a user, and uses root instead.
 
 --no-password <true/false>
     Skip creation of password for user. Defaults to false.
@@ -94,11 +95,11 @@ seabox help [subcommand]
 
 Seabox works best with prebuilt images, such as those [defined here](https://github.com/89luca89/distrobox/blob/main/docs/compatibility.md#containers-distros). [Dokken images](https://github.com/test-kitchen/dokken-images) are also great, as they come pre-installed with tools to make them appear like a full OS, and are built daily with convenience in mind - in the Dokken Ubuntu containers, for example, `apt update` has already been run, avoiding the need to run it manually upon entering the container for the first time.
 
-Most base images, such as `ubuntu:latest`, `fedora`, `alpine`, and `archlinux` do not come pre-installed with sudo. Seabox will attempt to detect this and prompt to install sudo on initial entry. Using the pre-baked images mentioned above can help avoid the time delay on initial entry that it takes to install sudo for these cases.
+Most base images, such as `ubuntu:latest`, `fedora`, `alpine`, and `archlinux` do not come pre-installed with sudo. Seabox will attempt to detect this and prompt to install sudo on initial entry. Using the pre-baked images mentioned above can help avoid the time delay on initial entry caused by installing sudo for these cases.
 
 Seabox will match a user in the container to correspond to the user on the host, and set up file mapping permissions correctly so the user can access files through the mount as if it were the host user. In case the container doesn't already have an "normal" user (id >= 1000), one would be created and given sudo permissions so as to act as a counterpart to the host user. 
 
-`seabox` will invoke `sudo podman` with flags such as `--privileged`,`network` mode is set to `host` for easy ability to run networked programs. Additionally, the current working directory will be mounted to `/mount` inside the container (unless changed by -d), letting you share files with the host. Run `seabox create --dry-run` to see the commandline flags that are passed to podman.
+`seabox` will invoke `sudo podman` with flags such as `--privileged`,`network` mode is set to `host` for easy ability to run networked programs. Additionally, the current working directory will be mounted to `/mount/` inside the container (unless changed by -d), letting you share files with the host. Run `seabox create --dry-run` to see the commandline flags that are passed to podman.
 
 
 ## Idmapped file mounts
