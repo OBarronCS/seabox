@@ -109,11 +109,11 @@ Seabox uses Podman's [idmapped file mounts feature](https://github.com/container
 Idmapped file mounts has the advantage of avoiding a boot-up cost when instantiating an image for the first time. Other methods of matching file permissions so that a given container user can access the files of a given user (`--userns=keep-id`,`--uidmap`) need to [recursively `chown` the image file system](https://github.com/containers/podman/blob/43c95d2c0bdfc71d005e015fe93b3e7a48f39adf/vendor/github.com/containers/storage/drivers/chown.go#L72-L73) which takes significant time for large images.
 
 
-# Note on security
+## Note on security
 Seabox uses rootful Podman, which means **root in the container is root on the host**. Do not run any software in these containers that you wouldn't run on your host.
 
 
-### Configuration
+## Configuration
 ```sh
 # Show location of config file
 seabox config
