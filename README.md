@@ -38,14 +38,14 @@ seabox create [options] <name>
 -d <directory>
     Directory to mount to /mount/ in the container. Defaults to pwd
 
--p, -pass-through
+-p, --pass-through
     Pass additional arguments to Podman - the string is broken into individual arguments using shell string parsing.
     Example: seabox create -p "--pidfile /tmp/pidfile --cidfile /tmp/cidfile" test
 
 -r, --root
     Use the root user in the container. Typically, seabox matches the host user to an unprivileged user in the container (creating one on entry if it doesn't exist). Passing this flag skips the initialization of such a user, and uses root instead.
 
---no-password <true/false>
+--no-password, --no-passwd <true/false>
     Skip creation of password for user. Defaults to false.
 
 --install-sudo <true/false>
