@@ -35,7 +35,7 @@ seabox create [options] <name>
     Select image for container, defaulting to one specified in config file
 
 -d <directory>
-    Directory to mount to /mount/ in the countainer. Defaults to pwd
+    Directory to mount to /mount/ in the container. Defaults to pwd
 
 -p, -pass-through
     Pass additional arguments to Podman - the string is broken into individual arguments using shell string parsing.
