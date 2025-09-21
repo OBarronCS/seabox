@@ -151,6 +151,12 @@ sudo_command = "doas"
 no_password = true
 # Install sudo without prompting on initial entry to containers
 install_sudo = true
+
+# You can also apply per-image settings like this:
+["docker.io/library/busybox:latest"]
+install_sudo = false
+no_password = true
+sudo_command = "sudo"
 ```
 
 Environment variables can also be used to set certain values:

@@ -12,6 +12,10 @@ const NEW_USER_USERNAME: &str = "user";
 
 const DEFAULT_SUDO_PATH: &str = "sudo";
 
+fn get_default_sudo_path() -> String {
+    DEFAULT_SUDO_PATH.to_string()
+}
+
 static DEFAULT_SHELL: &[&str] = &[
     "/bin/sh",
     "-c",
@@ -33,25 +37,47 @@ exec "$SHELL_PATH""###,
 const INIT_SCRIPT: &str = include_str!("init.sh");
 
 struct Context {
+    config: Config,
+    parsed_config_file: ConfigFileFormat,
+}
+
+#[derive(Default, Debug, serde::Deserialize, serde::Serialize)]
+struct Config {
+    image: Option<String>,
+
+    #[serde(default = "get_default_sudo_path")]
     sudo_command: String,
-    config: ConfigFileFormat,
+
+    #[serde(default)]
+    install_sudo: Option<bool>,
+
+    #[serde(default)]
+    no_password: bool,
+
+    #[serde(default)]
+    unsafe_setup_passwordless_sudo: bool,
 }
 
 #[derive(Default, Debug, serde::Deserialize, serde::Serialize)]
 struct ConfigFileFormat {
-    #[serde(rename = "image")]
+    #[serde(flatten)]
+    base: BaseConfig,
+
+    #[serde(flatten)]
+    image_specific: HashMap<String, BaseConfig>,
+}
+
+#[derive(Default, Debug, serde::Deserialize, serde::Serialize)]
+struct BaseConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     image: Option<String>,
-
-    #[serde(rename = "sudo_command")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     sudo_command: Option<String>,
-
-    #[serde(rename = "install_sudo")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     install_sudo: Option<bool>,
-
-    #[serde(rename = "no_password")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     no_password: Option<bool>,
-
-    #[serde(rename = "unsafe_setup_passwordless_sudo")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     unsafe_setup_passwordless_sudo: Option<bool>,
 }
 
@@ -91,8 +117,8 @@ enum Commands {
     // #[clap(subcommand)]
     Config {
         #[command(subcommand)]
-        inner: Option<ConfigSubcommand>, // Only once here for the inner level
-    }, // Config(ConfigSubcommand),
+        inner: Option<ConfigSubcommand>,
+    },
 }
 
 #[derive(Args)]
@@ -153,17 +179,7 @@ struct ListArgs {
 
 #[derive(Subcommand)]
 enum ConfigSubcommand {
-    Set(ConfigSetArgs),
     Show,
-}
-
-#[derive(Args)]
-struct ConfigSetArgs {
-    #[arg(short, long)]
-    image: Option<String>,
-
-    #[arg(long)]
-    sudo_command: Option<String>,
 }
 
 #[derive(Args)]
@@ -175,14 +191,17 @@ struct AllCommandArgs {
     verbose: bool,
 }
 
-#[derive(Args)]
+#[derive(Args, Default, Debug, serde::Deserialize, serde::Serialize)]
 struct CreateAndTempSharedArgs {
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(short, long)]
     image: Option<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(short, long)]
     shell: Option<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
         short,
         help = "Directory to mount (defaults to current working directory) to /mount in the container"
@@ -204,6 +223,7 @@ struct CreateAndTempSharedArgs {
     )]
     volume: Vec<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
         short,
         long,
@@ -222,6 +242,7 @@ struct CreateAndTempSharedArgs {
     )]
     root: bool,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
         long,
         help = "Attempt to install sudo + su in the container. Useful when using base distro images",
@@ -229,6 +250,7 @@ struct CreateAndTempSharedArgs {
     )]
     install_sudo: Option<bool>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
         long,
         help = "Skip creation of password for user",
@@ -237,6 +259,7 @@ struct CreateAndTempSharedArgs {
     )]
     no_password: Option<bool>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
         long,
         help = "Edit /etc/sudoers file in the container to allow passwordless sudo. WARNING: this gives programs running in the container access to root on the system with no password. Implies --no-password.",
@@ -293,34 +316,35 @@ fn get_configuration_file_path() -> String {
 }
 
 fn read_configuration_file() -> ConfigFileFormat {
-    // No merging with environment variables
+    // Returns default values of Config file if not found
     let config_file_path = get_configuration_file_path();
+    let config_as_str = std::fs::read_to_string(&config_file_path).unwrap_or_default();
+    toml::from_str(&config_as_str).unwrap()
+}
 
-    Figment::new()
-        .merge(Toml::file(config_file_path))
-        .extract()
-        .unwrap()
+fn create_config(base: &BaseConfig, profile: Option<&BaseConfig>) -> Config {
+    let mut config = Figment::new().merge(figment::providers::Serialized::defaults(base));
+
+    if let Some(p) = profile {
+        config = config.merge(figment::providers::Serialized::defaults(p));
+    }
+
+    config.merge(Env::prefixed("SEABOX_")).extract().unwrap()
 }
 
 fn main() {
-    let config_file_path = get_configuration_file_path();
+    let parsed: ConfigFileFormat = read_configuration_file();
 
-    let config: ConfigFileFormat = Figment::new()
-        .merge(Toml::file(config_file_path))
+    let config = Figment::new()
+        .merge(figment::providers::Serialized::defaults(&parsed.base))
         .merge(Env::prefixed("SEABOX_"))
         .extract()
         .unwrap();
 
     let mut context: Context = Context {
-        sudo_command: DEFAULT_SUDO_PATH.to_string(),
         config,
+        parsed_config_file: parsed,
     };
-
-    if let Some(x) = &context.config.sudo_command
-        && !x.is_empty()
-    {
-        context.sudo_command = x.to_string();
-    }
 
     let cli = Cli::parse();
 
@@ -330,15 +354,19 @@ fn main() {
 impl Context {
     fn run(&mut self, cli: Cli) {
         match &cli.command {
-            Some(Commands::Create(args)) => self.handle_create(args),
+            Some(Commands::Create(args)) => {
+                self.resolve_config_args_create_tmp(&args.common);
+                eprintln!("{:?}", self.config);
+                self.handle_create(args)
+            }
             Some(Commands::Enter(args)) => self.handle_enter(args),
             Some(Commands::Remove(args)) => self.handle_remove(args),
-            Some(Commands::Temp(args)) => self.handle_temp(args),
+            Some(Commands::Temp(args)) => {
+                self.resolve_config_args_create_tmp(&args.common);
+                self.handle_temp(args)
+            }
             Some(Commands::List(args)) => self.handle_list(args),
             Some(Commands::Restart(args)) => self.handle_restart(args),
-            Some(Commands::Config {
-                inner: Some(ConfigSubcommand::Set(x)),
-            }) => self.handle_config_set(x),
             Some(Commands::Config {
                 inner: Some(ConfigSubcommand::Show),
             }) => self.handle_config_show(),
@@ -347,6 +375,35 @@ impl Context {
             }
             _ => {}
         }
+    }
+
+    fn resolve_config_args_create_tmp(&mut self, cli_config_args: &CreateAndTempSharedArgs) {
+        // Config merge hierarchy:
+        // CLI > Env > Profile in config > config > defaults
+
+        // Two passes of merging config - first we need to resolve the image
+        // Once image has been resolved, insert the "image profile" into the merge hierarchy.
+
+        let config_with_cli_flags: Config =
+            Figment::from(figment::providers::Serialized::defaults(&self.config))
+                .merge(figment::providers::Serialized::defaults(&cli_config_args))
+                .extract()
+                .unwrap();
+
+        // If we have a profile for this image, apply it it to the config merge hierarchy
+        if let Some(cli_image) = &config_with_cli_flags.image {
+            for profile in &self.parsed_config_file.image_specific {
+                if profile.0 == cli_image {
+                    self.config = create_config(&self.parsed_config_file.base, Some(profile.1));
+                }
+            }
+        }
+
+        // Override with CLI args again
+        self.config = Figment::from(figment::providers::Serialized::defaults(&self.config))
+            .merge(figment::providers::Serialized::defaults(&cli_config_args))
+            .extract()
+            .unwrap();
     }
 
     fn resolve_image(&self, image: Option<String>) -> Option<String> {
@@ -472,7 +529,7 @@ impl Context {
         }
 
         let mut arguments: Vec<String> = [
-            &self.sudo_command,
+            &self.config.sudo_command,
             "podman",
             "run",
             "--label",
@@ -548,10 +605,16 @@ impl Context {
     }
 
     fn generate_container_inspect_command(&self, name: &str) -> Vec<String> {
-        vec![&self.sudo_command, "podman", "container", "inspect", name]
-            .into_iter()
-            .map(String::from)
-            .collect()
+        vec![
+            &self.config.sudo_command,
+            "podman",
+            "container",
+            "inspect",
+            name,
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect()
     }
 
     fn handle_create(&mut self, args: &CreateArgs) {
@@ -603,16 +666,6 @@ impl Context {
             .output()
             .expect("Failed to run command");
 
-        let passwordless_sudo: bool = args
-            .common
-            .unsafe_setup_passwordless_sudo
-            .unwrap_or_else(|| self.config.unsafe_setup_passwordless_sudo.unwrap_or(false));
-        let no_password: bool = args
-            .common
-            .no_password
-            .unwrap_or_else(|| self.config.no_password.unwrap_or(false));
-        let install_sudo: Option<bool> = args.common.install_sudo.or(self.config.install_sudo);
-
         let initial_enter_script = {
             if !args.common.root {
                 vec![
@@ -622,9 +675,9 @@ impl Context {
                         create_user,
                         NEW_USER_USERNAME,
                         container_user_id,
-                        passwordless_sudo,
-                        no_password,
-                        install_sudo,
+                        self.config.unsafe_setup_passwordless_sudo,
+                        self.config.no_password,
+                        self.config.install_sudo,
                         args.common.shell.clone(),
                         args.all.verbose,
                     ),
@@ -644,10 +697,16 @@ impl Context {
     }
 
     fn generate_image_inspect_command(&self, image: &str) -> Vec<String> {
-        vec![&self.sudo_command, "podman", "image", "inspect", image]
-            .into_iter()
-            .map(String::from)
-            .collect()
+        vec![
+            &self.config.sudo_command,
+            "podman",
+            "image",
+            "inspect",
+            image,
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect()
     }
 
     fn image_inspect(&self, image: &str, dry_run: bool) -> Option<String> {
@@ -674,7 +733,7 @@ impl Context {
     }
 
     fn generate_image_pull_command(&self, image: &str) -> Vec<String> {
-        vec![&self.sudo_command, "podman", "pull", image]
+        vec![&self.config.sudo_command, "podman", "pull", image]
             .into_iter()
             .map(String::from)
             .collect()
@@ -682,7 +741,7 @@ impl Context {
 
     fn generate_cat_etc_password_command(&self, image: &str) -> Vec<String> {
         vec![
-            &self.sudo_command,
+            &self.config.sudo_command,
             "podman",
             "run",
             "--rm",
@@ -798,7 +857,7 @@ impl Context {
     ) -> Vec<String> {
         let dir = &format!("/mount/{relative_path}");
         let mut command: Vec<String> = vec![
-            &self.sudo_command,
+            &self.config.sudo_command,
             "podman",
             "exec",
             "-it",
@@ -960,16 +1019,6 @@ impl Context {
             args.all.dry_run,
         );
 
-        let passwordless_sudo: bool = args
-            .common
-            .unsafe_setup_passwordless_sudo
-            .unwrap_or_else(|| self.config.unsafe_setup_passwordless_sudo.unwrap_or(false));
-        let no_password: bool = args
-            .common
-            .no_password
-            .unwrap_or_else(|| self.config.no_password.unwrap_or(false));
-        let install_sudo: Option<bool> = args.common.install_sudo.or(self.config.install_sudo);
-
         let user_command = {
             if !args.common.root {
                 vec![
@@ -979,9 +1028,9 @@ impl Context {
                         create_user,
                         NEW_USER_USERNAME,
                         container_user_id,
-                        passwordless_sudo,
-                        no_password,
-                        install_sudo,
+                        self.config.unsafe_setup_passwordless_sudo,
+                        self.config.no_password,
+                        self.config.install_sudo,
                         args.common.shell.clone(),
                         args.all.verbose,
                     ),
@@ -1009,7 +1058,7 @@ impl Context {
 
     fn generate_list_containers_command(&self) -> Vec<String> {
         vec![
-            &self.sudo_command,
+            &self.config.sudo_command,
             "podman",
             "ps",
             "--all",
@@ -1035,7 +1084,7 @@ impl Context {
     }
 
     fn generate_container_stop_command(&self, name: &str) -> Vec<String> {
-        vec![&self.sudo_command, "podman", "kill", name]
+        vec![&self.config.sudo_command, "podman", "kill", name]
             .into_iter()
             .map(String::from)
             .collect()
@@ -1043,7 +1092,7 @@ impl Context {
 
     fn generate_container_delete_command(&self, name: &str) -> Vec<String> {
         vec![
-            &self.sudo_command,
+            &self.config.sudo_command,
             "podman",
             "container",
             "rm",
@@ -1056,7 +1105,7 @@ impl Context {
     }
 
     fn generate_container_start_command(&self, name: &str) -> Vec<String> {
-        vec![&self.sudo_command, "podman", "start", name]
+        vec![&self.config.sudo_command, "podman", "start", name]
             .into_iter()
             .map(String::from)
             .collect()
@@ -1095,27 +1144,6 @@ impl Context {
             println!("{}", x);
         } else {
             eprintln!("Config file not found at {}", &cfg);
-        }
-    }
-
-    fn handle_config_set(&self, args: &ConfigSetArgs) {
-        let mut config: ConfigFileFormat = read_configuration_file();
-
-        if args.image.is_some() {
-            config.image = args.image.clone();
-        }
-
-        if args.sudo_command.is_some() {
-            config.sudo_command = args.sudo_command.clone();
-        }
-
-        let config = toml::to_string(&config).unwrap();
-        let result = std::fs::write(get_configuration_file_path(), config);
-        match result {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("Writing to file failed: {e}")
-            }
         }
     }
 }
