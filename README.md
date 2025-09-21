@@ -144,19 +144,27 @@ seabox config show
 ```
 
 ##### Example config
-```sh
+```toml
 image = "docker.io/dokken/ubuntu-25.04"
 sudo_command = "doas"
 # Don't prompt for password creation on initial entry (no password will be set)
 no_password = true
 # Install sudo without prompting on initial entry to containers
 install_sudo = true
+pass_through = "--cidfile /tmp/cidfile"
 
 # You can also apply per-image settings like this:
+["docker.io/dokken/ubuntu-25.04"]
+directory = "/home/my_user/mount_point"
+
 ["docker.io/library/busybox:latest"]
 install_sudo = false
 no_password = true
 sudo_command = "sudo"
+no_dir = true
+
+["docker.io/library/alpine:latest"]
+root = true # Use the root user in the container, skip new user initialization
 ```
 
 Environment variables can also be used to set certain values:

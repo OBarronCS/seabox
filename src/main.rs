@@ -1,6 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 use figment::Figment;
-use figment::providers::{Env, Format, Toml};
+use figment::providers::Env;
 use std::collections::HashMap;
 use std::fs;
 use std::os::unix::process::CommandExt;
@@ -49,6 +49,18 @@ struct Config {
     sudo_command: String,
 
     #[serde(default)]
+    directory: Option<String>,
+
+    #[serde(default)]
+    root: bool,
+
+    #[serde(default)]
+    no_dir: bool,
+
+    #[serde(default)]
+    pass_through: Option<String>,
+
+    #[serde(default)]
     install_sudo: Option<bool>,
 
     #[serde(default)]
@@ -72,6 +84,14 @@ struct BaseConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     image: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    directory: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    root: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    no_dir: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pass_through: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     sudo_command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     install_sudo: Option<bool>,
@@ -79,21 +99,6 @@ struct BaseConfig {
     no_password: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     unsafe_setup_passwordless_sudo: Option<bool>,
-}
-
-#[derive(Default, Debug, serde::Deserialize, serde::Serialize)]
-struct BoxInstanceFormat {
-    #[serde(rename = "name")]
-    name: String,
-
-    #[serde(rename = "image")]
-    image: String,
-
-    #[serde(rename = "container_id")]
-    container_id: String,
-
-    #[serde(rename = "rootful")]
-    rootful: bool,
 }
 
 #[derive(Parser)]
@@ -208,12 +213,13 @@ struct CreateAndTempSharedArgs {
     )]
     directory: Option<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
         long,
         help = "Do not mount the current working directory",
-        action = clap::ArgAction::SetTrue
+        value_parser = clap::builder::BoolishValueParser::new(), num_args(0..=1), default_missing_value = "true",
     )]
-    no_dir: bool,
+    no_dir: Option<bool>,
 
     #[arg(
         short,
@@ -233,14 +239,15 @@ struct CreateAndTempSharedArgs {
     )]
     pass_through: Option<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
         short,
         long,
-        default_value = "false",
         help = "Use root user in container",
-        long_help = "Use the root user in the container. Typically, in case the container doesn't already have an \"normal\" user (id >= 1000), one would be created and given sudo permissions so as to act as a counterpart to the host user. This flag results in such a user not being created."
+        long_help = "Use the root user in the container. Typically, in case the container doesn't already have an \"normal\" user (id >= 1000), one would be created and given sudo permissions so as to act as a counterpart to the host user. This flag results in such a user not being created.",
+        value_parser = clap::builder::BoolishValueParser::new(), num_args(0..=1), default_missing_value = "true",
     )]
-    root: bool,
+    root: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
@@ -356,13 +363,18 @@ impl Context {
         match &cli.command {
             Some(Commands::Create(args)) => {
                 self.resolve_config_args_create_tmp(&args.common);
-                eprintln!("{:?}", self.config);
+                if args.all.dry_run {
+                    println!("{:#?}", self.config);
+                }
                 self.handle_create(args)
             }
             Some(Commands::Enter(args)) => self.handle_enter(args),
             Some(Commands::Remove(args)) => self.handle_remove(args),
             Some(Commands::Temp(args)) => {
                 self.resolve_config_args_create_tmp(&args.common);
+                if args.all.dry_run {
+                    println!("{:#?}", self.config);
+                }
                 self.handle_temp(args)
             }
             Some(Commands::List(args)) => self.handle_list(args),
@@ -384,39 +396,21 @@ impl Context {
         // Two passes of merging config - first we need to resolve the image
         // Once image has been resolved, insert the "image profile" into the merge hierarchy.
 
-        let config_with_cli_flags: Config =
-            Figment::from(figment::providers::Serialized::defaults(&self.config))
-                .merge(figment::providers::Serialized::defaults(&cli_config_args))
-                .extract()
-                .unwrap();
-
-        // If we have a profile for this image, apply it it to the config merge hierarchy
-        if let Some(cli_image) = &config_with_cli_flags.image {
-            for profile in &self.parsed_config_file.image_specific {
-                if profile.0 == cli_image {
-                    self.config = create_config(&self.parsed_config_file.base, Some(profile.1));
-                }
-            }
-        }
-
-        // Override with CLI args again
         self.config = Figment::from(figment::providers::Serialized::defaults(&self.config))
             .merge(figment::providers::Serialized::defaults(&cli_config_args))
             .extract()
             .unwrap();
-    }
 
-    fn resolve_image(&self, image: Option<String>) -> Option<String> {
-        match image {
-            Some(i) => Some(i),
-            _ => {
-                let image = &self.config.image;
-                if let Some(x) = image
-                    && !x.is_empty()
-                {
-                    Some(x.to_string())
-                } else {
-                    None
+        // If we have a profile for this image, apply it it to the config merge hierarchy
+        if let Some(cli_image) = &self.config.image.clone() {
+            for profile in &self.parsed_config_file.image_specific {
+                if profile.0 == cli_image {
+                    self.config = create_config(&self.parsed_config_file.base, Some(profile.1));
+                    self.config =
+                        Figment::from(figment::providers::Serialized::defaults(&self.config))
+                            .merge(figment::providers::Serialized::defaults(&cli_config_args))
+                            .extract()
+                            .unwrap();
                 }
             }
         }
@@ -434,10 +428,8 @@ impl Context {
         additional_mounts: Vec<String>,
         dry_run: bool,
     ) -> (Vec<String>, bool, i64, i64, String) {
-        let image = &self.resolve_image(image);
-
         let image: &str = {
-            if let Some(x) = image {
+            if let Some(x) = &image {
                 x
             } else {
                 eprintln!("No default image found and no image provided with --image");
@@ -573,8 +565,6 @@ impl Context {
                 "-u",
                 user_string,
                 "--passwd=false",
-                "-w",
-                "/mount/",
             ]
             .iter()
             .map(|x| x.to_string())
@@ -582,8 +572,12 @@ impl Context {
         );
 
         if !no_dir {
-            arguments.push("--mount".to_string());
-            arguments.push(mount.to_string());
+            arguments.extend(
+                ["--mount", mount, "-w", "/mount/"]
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>(),
+            );
         }
 
         arguments.extend(additional_mount_strings);
@@ -631,13 +625,13 @@ impl Context {
             _container_user_gid,
             _image,
         ) = self.generate_create_container_command(
-            args.common.image.clone(),
+            self.config.image.clone(),
             &args.name,
-            args.common.root,
+            self.config.root,
             false,
-            args.common.pass_through.clone(),
-            args.common.directory.clone(),
-            args.common.no_dir,
+            self.config.pass_through.clone(),
+            self.config.directory.clone(),
+            self.config.no_dir,
             args.common.volume.clone(),
             args.all.dry_run,
         );
@@ -667,7 +661,7 @@ impl Context {
             .expect("Failed to run command");
 
         let initial_enter_script = {
-            if !args.common.root {
+            if !self.config.root {
                 vec![
                     "/bin/sh".to_string(),
                     "-c".to_string(),
@@ -1008,19 +1002,19 @@ impl Context {
             _container_user_gid,
             _image,
         ) = self.generate_create_container_command(
-            args.common.image.clone(),
+            self.config.image.clone(),
             "",
-            args.common.root,
+            self.config.root,
             true,
-            args.common.pass_through.clone(),
-            args.common.directory.clone(),
-            args.common.no_dir,
+            self.config.pass_through.clone(),
+            self.config.directory.clone(),
+            self.config.no_dir,
             args.common.volume.clone(),
             args.all.dry_run,
         );
 
         let user_command = {
-            if !args.common.root {
+            if !self.config.root {
                 vec![
                     "/bin/sh".to_string(),
                     "-c".to_string(),
@@ -1164,10 +1158,10 @@ fn create_initial_enter_script(
     verbose: bool,
 ) -> String {
     let param_sudo_install_prompt = {
-        if let Some(x) = install_sudo {
-            if x { "install" } else { "no_install" }
-        } else {
-            "prompt"
+        match install_sudo {
+            Some(true) => "install",
+            Some(false) => "no_install",
+            None => "prompt",
         }
     };
 
