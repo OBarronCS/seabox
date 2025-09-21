@@ -51,8 +51,8 @@ struct ConfigFileFormat {
     #[serde(rename = "no_password")]
     no_password: Option<bool>,
 
-    #[serde(rename = "passwordless_sudo")]
-    passwordless_sudo: Option<bool>,
+    #[serde(rename = "unsafe_setup_passwordless_sudo")]
+    unsafe_setup_passwordless_sudo: Option<bool>,
 }
 
 #[derive(Default, Debug, serde::Deserialize, serde::Serialize)]
@@ -190,7 +190,7 @@ struct CreateAndTempSharedArgs {
     directory: Option<String>,
 
     #[arg(
-        short,
+        long,
         help = "Do not mount the current working directory",
         action = clap::ArgAction::SetTrue
     )]
@@ -203,6 +203,15 @@ struct CreateAndTempSharedArgs {
         long_help = "Add additional mounts with the format 'host_directory:container_directory'. Can be specified multiple times"
     )]
     volume: Vec<String>,
+
+    #[arg(
+        short,
+        long,
+        allow_hyphen_values = true,
+        help = "Additional arguments to pass to Podman",
+        long_help = "Pass additional arguments to Podman - the string is broken into individual arguments using shell string parsing with shlex.\nExample: seabox create -p \"--pidfile /tmp/pidfile --cidfile /tmp/cidfile\" test"
+    )]
+    pass_through: Option<String>,
 
     #[arg(
         short,
@@ -230,19 +239,10 @@ struct CreateAndTempSharedArgs {
 
     #[arg(
         long,
-        help = "Edit /etc/sudoers file in the container to allow passwordless sudo. Implies --no-password.",
+        help = "Edit /etc/sudoers file in the container to allow passwordless sudo. WARNING: this gives programs running in the container access to root on the system with no password. Implies --no-password.",
         value_parser = clap::builder::BoolishValueParser::new(), num_args(0..=1), default_missing_value = "true",
     )]
-    passwordless_sudo: Option<bool>,
-
-    #[arg(
-        short,
-        long,
-        allow_hyphen_values = true,
-        help = "Additional arguments to pass to Podman",
-        long_help = "Pass additional arguments to Podman - the string is broken into individual arguments using shell string parsing with shlex.\nExample: seabox create -p \"--pidfile /tmp/pidfile --cidfile /tmp/cidfile\" test"
-    )]
-    pass_through: Option<String>,
+    unsafe_setup_passwordless_sudo: Option<bool>,
 }
 
 #[derive(serde::Deserialize)]
@@ -605,8 +605,8 @@ impl Context {
 
         let passwordless_sudo: bool = args
             .common
-            .passwordless_sudo
-            .unwrap_or_else(|| self.config.passwordless_sudo.unwrap_or(false));
+            .unsafe_setup_passwordless_sudo
+            .unwrap_or_else(|| self.config.unsafe_setup_passwordless_sudo.unwrap_or(false));
         let no_password: bool = args
             .common
             .no_password
@@ -962,8 +962,8 @@ impl Context {
 
         let passwordless_sudo: bool = args
             .common
-            .passwordless_sudo
-            .unwrap_or_else(|| self.config.passwordless_sudo.unwrap_or(false));
+            .unsafe_setup_passwordless_sudo
+            .unwrap_or_else(|| self.config.unsafe_setup_passwordless_sudo.unwrap_or(false));
         let no_password: bool = args
             .common
             .no_password

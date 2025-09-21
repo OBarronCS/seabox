@@ -64,10 +64,13 @@ seabox create [options] <name>
     Useful when using base distro images where it is not preinstalled.
     Defaults to prompt to install.
 
---passwordless-sudo <true/false>
+--unsafe-setup-passwordless-sudo <true/false>
     Setup passwordless sudo access for user in container.
     Note the security implications - this means software running in the container
-    has passwordless access to root. Implies --no-password.
+    has passwordless access to root.
+    WARNING: Root in the container can modify the host system. Enabling this means
+    passwordless escalation to root on the host for programs in the container.
+    Implies --no-password.
     Defaults to false.
 ```
 
@@ -117,7 +120,7 @@ Most base images, such as `ubuntu:latest`, `fedora`, `alpine`, and `archlinux` d
 
 Seabox will match a user in the container to correspond to the user on the host, and set up file mapping permissions correctly so the user can access files through the mount as if it were the host user. In case the container doesn't already have an "normal" user (id >= 1000), one would be created and given sudo permissions so as to act as a counterpart to the host user. 
 
-`seabox` will invoke `sudo podman` with flags such as `--privileged`,`network` mode is set to `host` for easy ability to run networked programs. Additionally, the current working directory will be mounted to `/mount/` inside the container (unless changed by -d), letting you share files with the host. Run `seabox create --dry-run` to see the commandline flags that are passed to podman.
+`seabox` will invoke `sudo podman` with flags such as `--privileged` and `network` mode set to `host` for easy ability to run networked programs. Additionally, the current working directory will be mounted to `/mount/` inside the container (unless changed by -d), letting you share files with the host. Run `seabox create --dry-run` to see the commandline flags that are passed to podman.
 
 
 ## Idmapped file mounts
@@ -128,7 +131,7 @@ Idmapped file mounts has the advantage of avoiding a boot-up cost when instantia
 
 
 ## Note on security
-Seabox uses rootful Podman, which means **root in the container is root on the host**. Do not run any software in these containers that you wouldn't run on your host.
+Seabox uses rootful Podman, which means **root in the container is root on the host**. Do not run any software in these containers that you wouldn't run on your host. Root in the container can modify the host system - the container environment should be treated as providing convenient access to a root file system of a chosen Linux distribution with no security isolation to the host.
 
 
 ## Configuration
