@@ -28,7 +28,7 @@ seabox rm my-dev-environment
 ## Command reference
 
 Instantiate a container:
-```sh
+```
 seabox create [options] <name>
 
 # Options
@@ -72,7 +72,7 @@ seabox create [options] <name>
 ```
 
 Enter an existing container:
-```sh
+```
 seabox enter [options] <name>
 
 # Options
