@@ -38,21 +38,37 @@ seabox create [options] <name>
 -d <directory>
     Directory to mount to /mount/ in the container. Defaults to pwd
 
+--no-dir
+    Do not mount pwd by default
+
+-v, --volume
+    Add additional mounts with the format 'host_directory:container_directory'.
+    Can be specified multiple times
+    Example: seabox tmp -v /tmp/host_dir:/tmp/container_dir
+
 -p, --pass-through
-    Pass additional arguments to Podman - the string is broken into individual arguments using shell string parsing.
+    Pass additional arguments to Podman - the string is broken into
+    individual arguments using shell string parsing.
     Example: seabox create -p "--pidfile /tmp/pidfile --cidfile /tmp/cidfile" test
 
 -r, --root
-    Use the root user in the container. Typically, seabox matches the host user to an unprivileged user in the container (creating one on entry if it doesn't exist). Passing this flag skips the initialization of such a user, and uses root instead.
+    Use the root user in the container. Typically, seabox matches the host user to
+    an unprivileged user in the container, creating one on entry if it doesn't exist.
+    Passing this flag skips the initialization of such a user, and uses root instead.
 
 --no-password, --no-passwd <true/false>
     Skip creation of password for user. Defaults to false.
 
 --install-sudo <true/false>
-    Automatically answer "yes" to installing sudo/su on initial entry to container. Useful when using base distro images where it is not preinstalled. Defaults to prompt to install.
+    Automatically answer "yes" to installing sudo/su on initial entry to container.
+    Useful when using base distro images where it is not preinstalled.
+    Defaults to prompt to install.
 
 --passwordless-sudo <true/false>
-    Setup passwordless sudo access for user in container. Note the security implications - this means software running in the container has passwordless access to root. Implies --no-password. Defaults to false.
+    Setup passwordless sudo access for user in container.
+    Note the security implications - this means software running in the container
+    has passwordless access to root. Implies --no-password.
+    Defaults to false.
 ```
 
 Enter an existing container:
@@ -61,10 +77,12 @@ seabox enter [options] <name>
 
 # Options
 -u, --user <username>
-    Enter the container with the given user. Defaults to the user setup on container creation.
+    Enter the container with the given user.
+    Defaults to the user setup on container creation.
 
 -s, --shell <shell>
-    Override the shell to use. Defaults to using the user's login shell as specified in /etc/passwd
+    Override the shell to use.
+    Defaults to using the user's login shell as specified in /etc/passwd
 ```
 
 List all containers created with seabox

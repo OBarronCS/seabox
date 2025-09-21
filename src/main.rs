@@ -171,7 +171,7 @@ struct AllCommandArgs {
     #[arg(long, default_value = "false")]
     dry_run: bool,
 
-    #[arg(short, long, default_value = "false")]
+    #[arg(long, default_value = "false")]
     verbose: bool,
 }
 
@@ -188,6 +188,21 @@ struct CreateAndTempSharedArgs {
         help = "Directory to mount (defaults to current working directory) to /mount in the container"
     )]
     directory: Option<String>,
+
+    #[arg(
+        short,
+        help = "Do not mount the current working directory",
+        action = clap::ArgAction::SetTrue
+    )]
+    no_dir: bool,
+
+    #[arg(
+        short,
+        long,
+        help = "Add additional mounts manually",
+        long_help = "Add additional mounts with the format 'host_directory:container_directory'. Can be specified multiple times"
+    )]
+    volume: Vec<String>,
 
     #[arg(
         short,
@@ -358,6 +373,8 @@ impl Context {
         temp: bool,
         passthrough: Option<String>,
         directory: Option<String>,
+        no_dir: bool,
+        additional_mounts: Vec<String>,
         dry_run: bool,
     ) -> (Vec<String>, bool, i64, i64, String) {
         let image = &self.resolve_image(image);
@@ -433,6 +450,27 @@ impl Context {
             current_dir, idmap_parameters
         );
 
+        let mut additional_mount_strings: Vec<String> = vec![];
+
+        for mount_specifier in additional_mounts {
+            let values: Vec<&str> = mount_specifier.split(":").collect();
+            if values.len() != 2 {
+                eprintln!("Invalid format for mount: {}", mount_specifier);
+                exit(1);
+            }
+            let host_dir = values[0];
+            let container_dir = values[1];
+
+            additional_mount_strings.extend(vec![
+                "--mount".to_string(),
+                format!(
+                    "type=bind,source={},destination={},idmap=uids={}",
+                    host_dir, container_dir, idmap_parameters
+                )
+                .to_string(),
+            ]);
+        }
+
         let mut arguments: Vec<String> = [
             &self.sudo_command,
             "podman",
@@ -453,9 +491,9 @@ impl Context {
         }
 
         if let Some(passthrough) = passthrough
-            && let Some(mut pass_through_args) = shlex::split(&passthrough)
+            && let Some(pass_through_args) = shlex::split(&passthrough)
         {
-            arguments.append(&mut pass_through_args);
+            arguments.extend(pass_through_args);
         }
 
         let add_host_str = &format!("{hostname}:127.0.0.1");
@@ -467,8 +505,8 @@ impl Context {
             }
         };
 
-        arguments.append(
-            &mut [
+        arguments.extend(
+            [
                 "--network",
                 "host",
                 "--hostname",
@@ -480,15 +518,24 @@ impl Context {
                 "--passwd=false",
                 "-w",
                 "/mount/",
-                "--mount",
-                mount,
-                "--name",
-                name,
-                image,
             ]
             .iter()
             .map(|x| x.to_string())
             .collect::<Vec<String>>(),
+        );
+
+        if !no_dir {
+            arguments.push("--mount".to_string());
+            arguments.push(mount.to_string());
+        }
+
+        arguments.extend(additional_mount_strings);
+
+        arguments.extend(
+            ["--name", name, image]
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>(),
         );
 
         (
@@ -527,6 +574,8 @@ impl Context {
             false,
             args.common.pass_through.clone(),
             args.common.directory.clone(),
+            args.common.no_dir,
+            args.common.volume.clone(),
             args.all.dry_run,
         );
 
@@ -906,6 +955,8 @@ impl Context {
             true,
             args.common.pass_through.clone(),
             args.common.directory.clone(),
+            args.common.no_dir,
+            args.common.volume.clone(),
             args.all.dry_run,
         );
 
