@@ -152,9 +152,11 @@ no_password = true
 # Install sudo without prompting on initial entry to containers
 install_sudo = true
 pass_through = "--cidfile /tmp/cidfile"
+# Mount additional directories
+volume = ["/tmp/host_test:/tmp/container_test", "/home/user/app:/app"]
 
 # You can also apply per-image settings like this:
-["docker.io/dokken/ubuntu-25.04"]
+["docker.io/dokken/ubuntu-25.04:latest"]
 directory = "/home/my_user/mount_point"
 
 ["docker.io/library/busybox:latest"]

@@ -58,6 +58,9 @@ struct Config {
     no_dir: bool,
 
     #[serde(default)]
+    volume: Vec<String>,
+
+    #[serde(default)]
     pass_through: Option<String>,
 
     #[serde(default)]
@@ -89,6 +92,8 @@ struct BaseConfig {
     root: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     no_dir: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    volume: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pass_through: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -221,13 +226,14 @@ struct CreateAndTempSharedArgs {
     )]
     no_dir: Option<bool>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
         short,
         long,
         help = "Add additional mounts manually",
         long_help = "Add additional mounts with the format 'host_directory:container_directory'. Can be specified multiple times"
     )]
-    volume: Vec<String>,
+    volume: Option<Vec<String>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
@@ -632,7 +638,7 @@ impl Context {
             self.config.pass_through.clone(),
             self.config.directory.clone(),
             self.config.no_dir,
-            args.common.volume.clone(),
+            self.config.volume.clone(),
             args.all.dry_run,
         );
 
@@ -1009,7 +1015,7 @@ impl Context {
             self.config.pass_through.clone(),
             self.config.directory.clone(),
             self.config.no_dir,
-            args.common.volume.clone(),
+            self.config.volume.clone(),
             args.all.dry_run,
         );
 
