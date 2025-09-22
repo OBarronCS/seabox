@@ -853,16 +853,15 @@ impl Context {
         user: &str,
         name: &str,
         exec_command: Vec<String>,
-        relative_path: &str,
+        workdir: &str,
     ) -> Vec<String> {
-        let dir = &format!("/mount/{relative_path}");
         let mut command: Vec<String> = vec![
             &self.config.sudo_command,
             "podman",
             "exec",
             "-it",
             "-w",
-            dir,
+            workdir,
             "--user",
             &user,
             name,
@@ -916,18 +915,29 @@ impl Context {
         let info: Vec<PodmanContainerInspectFormat> =
             serde_json::from_str(&stdout_text).expect("JSON parse error");
 
-        let host_dir = &info[0].mounts[0].source;
-        let absolute_path = std::path::absolute(host_dir).expect("Couldn't make path absolute");
+        let workdir: String = {
+            if !info[0].mounts.is_empty() {
+                let host_dir = &info[0].mounts[0].source;
+                let absolute_path =
+                    std::path::absolute(host_dir).expect("Couldn't make path absolute");
 
-        let current_dir = std::env::current_dir().expect("Current working directory not found");
-        let current_dir = current_dir.to_str().unwrap();
-        let cwd_path = std::path::absolute(current_dir).expect("Couldn't make path absolute");
+                let current_dir =
+                    std::env::current_dir().expect("Current working directory not found");
+                let current_dir = current_dir.to_str().unwrap();
+                let cwd_path =
+                    std::path::absolute(current_dir).expect("Couldn't make path absolute");
+                let relative_path = cwd_path
+                    .strip_prefix(absolute_path)
+                    .ok()
+                    .and_then(|x| x.to_str())
+                    .unwrap_or("")
+                    .to_string();
 
-        let rel = cwd_path
-            .strip_prefix(absolute_path)
-            .ok()
-            .and_then(|x| x.to_str())
-            .unwrap_or("");
+                format!("/mount/{relative_path}")
+            } else {
+                "".to_string()
+            }
+        };
 
         let user = match username {
             Some(x) => x,
@@ -935,7 +945,7 @@ impl Context {
         };
 
         let container_enter_command =
-            self.generate_container_enter_command(&user, name, shell_command, rel);
+            self.generate_container_enter_command(&user, name, shell_command, &workdir);
 
         if dry_run {
             print_command(container_inspect_command);
