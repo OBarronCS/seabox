@@ -1,8 +1,8 @@
 # Seabox
 
-Seabox is a wrapper around various `podman` commands to simplify creating Linux environments using containers. This allows you to spin up workspaces with different Linux distributions to install and run software in, providing flexibility to create independent contexts that suit the needs of given software workflows and toolchains.
+Seabox is a wrapper around various `podman` commands that simplifies the creation of workspaces with the use of containers. It makes it simple to spin up environments with different Linux distributions that match the needs of the software you want to run. Need to compile something that depends on an old toolchain or want to test something without polluting your system? Use seabox to manage a development environment using any container image.
 
-Seabox is modeled after [distrobox](https://github.com/89luca89/distrobox) and [toolbx](https://github.com/containers/toolbox), allowing you to instantiate OCI images for use as standalone environments with host integration. Seabox has a couple adjustments - it uses rootful podman to run containers, is less tightly integrated with the host (such as no default mounting of host root and home directories), and has minimal container initialization.
+Seabox is modeled after [distrobox](https://github.com/89luca89/distrobox) and [toolbx](https://github.com/containers/toolbox), allowing you to instantiate OCI images for use as standalone environments with host integration. You can mount a directory, allowing file sharing with the host and the container. Seabox makes a couple adjustments compared to `distrobox` and `toolbx` - it uses rootful podman to run containers, is less tightly integrated with the host (such as no default mounting of root and home directories), and has minimal container initialization.
 
 ## Install
 ```sh
@@ -11,18 +11,18 @@ cargo install --git https://github.com/OBarronCS/seabox.git
 
 ## Quick start
 ```sh
-# Create a container
-seabox create my-dev-environment -i docker.io/dokken/ubuntu-25.04
-## The current working directory is mounted to /mount/ in the container
+# Create a container named "dev"
+## This will mount the current working directory to /mount/ in the container
+seabox create dev -i docker.io/dokken/ubuntu-25.04
 
 # List containers created with seabox
 seabox ls
 
 # Enter a container
-seabox enter my-dev-environment
+seabox enter dev
 
 # Remove a container
-seabox rm my-dev-environment
+seabox rm dev
 ```
 
 ## Command reference
@@ -169,9 +169,11 @@ no_dir = true
 root = true # Use the root user in the container, skip new user initialization
 ```
 
-Environment variables can also be used to set certain values:
+Environment variables can also be used to set values:
 ```sh
 SEABOX_SUDO_COMMAND=doas
 SEABOX_INSTALL_SUDO=true
 SEABOX_NO_PASSWORD=true
 ```
+
+The order of precedence is: CLI flags > environment variables > config values
