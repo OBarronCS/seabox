@@ -556,7 +556,9 @@ impl Context {
             if temp {
                 "0:0"
             } else {
-                &format!("{container_user_id}:{container_user_gid}")
+                // Keep container GID blank - otherwise the container user only has one GID
+                // &format!("{container_user_id}:{container_user_gid}")
+                &format!("{container_user_id}:")
             }
         };
 

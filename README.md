@@ -143,36 +143,60 @@ seabox config
 seabox config show
 ```
 
-##### Example config
+##### Config file
+
+You can puts settings in a config file to choose the default values of the commandline arguments.
+
+This is an example config file that contains all the currently available options. All options are optional.
 ```toml
+# Choose the default container image to use
 image = "docker.io/dokken/ubuntu-25.04"
-sudo_command = "doas"
-# Don't prompt for password creation on initial entry (no password will be set)
-no_password = true
-# Install sudo without prompting on initial entry to containers
-install_sudo = true
-pass_through = "--cidfile /tmp/cidfile"
-# Mount additional directories
+
+# Override default directory on the host to correspond to /mount in the container
+# This defaults to the current directory when invoking seabox  
+directory = "/home/my_user/mount_point"
+
+# Use the root user in the container and skip new user initialization
+root = true
+
+# Do not mount a directory when creating a container
+no_dir = true
+
+# Mount additional directories. List of "host_path:container_path" strings 
 volume = ["/tmp/host_test:/tmp/container_test", "/home/user/app:/app"]
 
-# You can also apply per-image settings like this:
+# Additional arguments to pass to podman
+pass_through = "--cidfile /tmp/cidfile"
+
+# Override sudo command
+sudo_command = "doas"
+
+# Install sudo without prompting on initial entry to containers
+install_sudo = true
+
+# Don't prompt for password creation on initial entry (no password will be set)
+no_password = true
+
+# Setup passwordless sudo access for the user. Note the security implications.
+unsafe_setup_passwordless_sudo = false
+
+# You can also apply per-image settings like this.
+# These take precedence over global settings
 ["docker.io/dokken/ubuntu-25.04:latest"]
-directory = "/home/my_user/mount_point"
+unsafe_setup_passwordless_sudo = true
 
 ["docker.io/library/busybox:latest"]
 install_sudo = false
 no_password = true
-sudo_command = "sudo"
-no_dir = true
 
 ["docker.io/library/alpine:latest"]
-root = true # Use the root user in the container, skip new user initialization
+no_dir = true
 ```
 
-Environment variables can also be used to set values:
+Environment variables can also be used to set all the config values. For example:
 ```sh
-SEABOX_SUDO_COMMAND=doas
 SEABOX_INSTALL_SUDO=true
+SEABOX_SUDO_COMMAND=doas
 SEABOX_NO_PASSWORD=true
 ```
 
