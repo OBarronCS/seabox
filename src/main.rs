@@ -71,6 +71,9 @@ struct Config {
 
     #[serde(default)]
     unsafe_setup_passwordless_sudo: bool,
+
+    #[serde(default)]
+    pull: bool,
 }
 
 #[derive(Default, Debug, serde::Deserialize, serde::Serialize)]
@@ -104,6 +107,8 @@ struct BaseConfig {
     no_password: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     unsafe_setup_passwordless_sudo: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pull: Option<bool>,
 }
 
 #[derive(Parser)]
@@ -279,6 +284,14 @@ struct CreateAndTempSharedArgs {
         value_parser = clap::builder::BoolishValueParser::new(), num_args(0..=1), default_missing_value = "true",
     )]
     unsafe_setup_passwordless_sudo: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[arg(
+        long,
+        help = "Pull the latest version of container image.",
+        value_parser = clap::builder::BoolishValueParser::new(), num_args(0..=1), default_missing_value = "true",
+    )]
+    pull: Option<bool>,
 }
 
 #[derive(serde::Deserialize)]
@@ -432,6 +445,7 @@ impl Context {
         directory: Option<String>,
         no_dir: bool,
         additional_mounts: Vec<String>,
+        pull_image: bool,
         dry_run: bool,
     ) -> (Vec<String>, bool, i64, i64, String) {
         let image: &str = {
@@ -539,6 +553,10 @@ impl Context {
         .map(|x| x.to_string())
         .collect::<Vec<String>>();
 
+        if pull_image {
+            arguments.push("--pull=always".to_string())
+        }
+
         if temp {
             arguments.push("--rm".to_string())
         } else {
@@ -641,6 +659,7 @@ impl Context {
             self.config.directory.clone(),
             self.config.no_dir,
             self.config.volume.clone(),
+            self.config.pull,
             args.all.dry_run,
         );
 
@@ -1028,6 +1047,7 @@ impl Context {
             self.config.directory.clone(),
             self.config.no_dir,
             self.config.volume.clone(),
+            self.config.pull,
             args.all.dry_run,
         );
 
