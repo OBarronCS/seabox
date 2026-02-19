@@ -55,9 +55,6 @@ struct Config {
     root: bool,
 
     #[serde(default)]
-    no_dir: bool,
-
-    #[serde(default)]
     volume: Vec<String>,
 
     #[serde(default)]
@@ -93,8 +90,6 @@ struct BaseConfig {
     directory: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     root: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    no_dir: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     volume: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -217,19 +212,8 @@ struct CreateAndTempSharedArgs {
     shell: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[arg(
-        short,
-        help = "Directory to mount (defaults to current working directory) to /mount in the container"
-    )]
+    #[arg(short, help = "Host directory to mount to /mount in the container")]
     directory: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[arg(
-        long,
-        help = "Do not mount the current working directory",
-        value_parser = clap::builder::BoolishValueParser::new(), num_args(0..=1), default_missing_value = "true",
-    )]
-    no_dir: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     #[arg(
@@ -443,7 +427,6 @@ impl Context {
         temp: bool,
         passthrough: Option<String>,
         directory: Option<String>,
-        no_dir: bool,
         additional_mounts: Vec<String>,
         pull_image: bool,
         dry_run: bool,
@@ -485,59 +468,6 @@ impl Context {
         } else {
             container_user_id = 0;
             container_user_gid = 0;
-        }
-
-        let current_dir: std::path::PathBuf = {
-            if let Some(x) = directory {
-                let path = std::path::PathBuf::from(&x);
-                match fs::canonicalize(path) {
-                    Ok(p) => p,
-                    Err(_) => {
-                        eprintln!("Directory '{}' does not exist", x);
-                        exit(1);
-                    }
-                }
-            } else {
-                std::env::current_dir().expect("Current working directory not found")
-            }
-        };
-
-        let current_dir = String::from(current_dir.to_str().unwrap());
-
-        let idmap_parameters: String = {
-            if root {
-                "0-0-2000;gids=0-0-2000".to_string()
-            } else {
-                format!(
-                    "{host_user_id}-{container_user_id}-1#0-0-1;gids={host_user_gid}-{container_user_gid}-1#0-0-1",
-                )
-            }
-        };
-
-        let mount = &format!(
-            "type=bind,source={},destination=/mount/,idmap=uids={}",
-            current_dir, idmap_parameters
-        );
-
-        let mut additional_mount_strings: Vec<String> = vec![];
-
-        for mount_specifier in additional_mounts {
-            let values: Vec<&str> = mount_specifier.split(":").collect();
-            if values.len() != 2 {
-                eprintln!("Invalid format for mount: {}", mount_specifier);
-                exit(1);
-            }
-            let host_dir = values[0];
-            let container_dir = values[1];
-
-            additional_mount_strings.extend(vec![
-                "--mount".to_string(),
-                format!(
-                    "type=bind,source={},destination={},idmap=uids={}",
-                    host_dir, container_dir, idmap_parameters
-                )
-                .to_string(),
-            ]);
         }
 
         let mut arguments: Vec<String> = [
@@ -597,13 +527,60 @@ impl Context {
             .collect::<Vec<String>>(),
         );
 
-        if !no_dir {
-            arguments.extend(
-                ["--mount", mount, "-w", "/mount/"]
-                    .iter()
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>(),
-            );
+        let idmap_parameters: String = {
+            if root {
+                "0-0-2000;gids=0-0-2000".to_string()
+            } else {
+                format!(
+                    "{host_user_id}-{container_user_id}-1#0-0-1;gids={host_user_gid}-{container_user_gid}-1#0-0-1",
+                )
+            }
+        };
+
+        if let Some(x) = directory {
+            let path = std::path::PathBuf::from(&x);
+            match fs::canonicalize(path) {
+                Ok(dir_to_mount) => {
+                    let dir_to_mount = String::from(dir_to_mount.to_str().unwrap());
+
+                    let mount = &format!(
+                        "type=bind,source={},destination=/mount/,idmap=uids={}",
+                        dir_to_mount, idmap_parameters
+                    );
+
+                    arguments.extend(
+                        ["--mount", mount, "-w", "/mount/"]
+                            .iter()
+                            .map(|x| x.to_string())
+                            .collect::<Vec<String>>(),
+                    );
+                }
+                Err(_) => {
+                    eprintln!("Directory '{}' does not exist", x);
+                    exit(1);
+                }
+            }
+        }
+
+        let mut additional_mount_strings: Vec<String> = vec![];
+
+        for mount_specifier in additional_mounts {
+            let values: Vec<&str> = mount_specifier.split(":").collect();
+            if values.len() != 2 {
+                eprintln!("Invalid format for mount: {}", mount_specifier);
+                exit(1);
+            }
+            let host_dir = values[0];
+            let container_dir = values[1];
+
+            additional_mount_strings.extend(vec![
+                "--mount".to_string(),
+                format!(
+                    "type=bind,source={},destination={},idmap=uids={}",
+                    host_dir, container_dir, idmap_parameters
+                )
+                .to_string(),
+            ]);
         }
 
         arguments.extend(additional_mount_strings);
@@ -657,7 +634,6 @@ impl Context {
             false,
             self.config.pass_through.clone(),
             self.config.directory.clone(),
-            self.config.no_dir,
             self.config.volume.clone(),
             self.config.pull,
             args.all.dry_run,
@@ -1045,7 +1021,6 @@ impl Context {
             true,
             self.config.pass_through.clone(),
             self.config.directory.clone(),
-            self.config.no_dir,
             self.config.volume.clone(),
             self.config.pull,
             args.all.dry_run,

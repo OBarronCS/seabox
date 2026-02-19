@@ -36,10 +36,7 @@ seabox create [options] <name>
     Select image for container, defaulting to one specified in config file
 
 -d <directory>
-    Directory to mount to /mount/ in the container. Defaults to pwd
-
---no-dir
-    Do not mount pwd by default
+    Directory to mount to /mount/ in the container
 
 -v, --volume
     Add additional mounts with the format 'host_directory:container_directory'.
@@ -159,9 +156,6 @@ directory = "/home/my_user/mount_point"
 # Use the root user in the container and skip new user initialization
 root = true
 
-# Do not mount a directory when creating a container
-no_dir = true
-
 # Mount additional directories. List of "host_path:container_path" strings 
 volume = ["/tmp/host_test:/tmp/container_test", "/home/user/app:/app"]
 
@@ -190,7 +184,7 @@ install_sudo = false
 no_password = true
 
 ["docker.io/library/alpine:latest"]
-no_dir = true
+install_sudo = false
 ```
 
 Environment variables can also be used to set all the config values. For example:
