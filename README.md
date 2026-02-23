@@ -117,7 +117,7 @@ Most base images, such as `ubuntu:latest`, `fedora`, `alpine`, and `archlinux` d
 
 Seabox will match a user in the container to correspond to the user on the host, and set up file mapping permissions correctly so the user can access files through the mount as if it were the host user. In case the container doesn't already have an "normal" user (id >= 1000), one would be created and given sudo permissions so as to act as a counterpart to the host user. 
 
-`seabox` will invoke `sudo podman` with flags such as `--privileged` and `network` mode set to `host` for easy ability to run networked programs. Additionally, the current working directory will be mounted to `/mount/` inside the container (unless changed by -d), letting you share files with the host. Run `seabox create --dry-run` to see the commandline flags that are passed to podman.
+`seabox` will invoke `sudo podman` with flags such as `--privileged` and `network` mode set to `host` for easy ability to run networked programs. You can specify a host folder to mount to `/mount/` inside the container with the `-d` commandline argument. Run `seabox create --dry-run` to see the commandline flags that are passed to podman.
 
 
 ## Idmapped file mounts
