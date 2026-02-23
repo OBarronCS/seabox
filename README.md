@@ -13,7 +13,7 @@ cargo install --git https://github.com/OBarronCS/seabox.git
 ```sh
 # Create a container named "dev"
 ## This will mount the current working directory to /mount/ in the container
-seabox create dev -i docker.io/dokken/ubuntu-25.04
+seabox create dev -i docker.io/dokken/ubuntu-25.04 -d .
 
 # List containers created with seabox
 seabox ls
