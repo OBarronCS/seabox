@@ -658,10 +658,17 @@ impl Context {
             exit(1);
         }
 
-        std::process::Command::new(&create_container_command[0])
-            .args(&create_container_command[1..])
-            .output()
+        let mut create_container_process = std::process::Command::new(&create_container_command[0]);
+        create_container_process.args(&create_container_command[1..]);
+
+        let create_process_result = create_container_process
+            .status()
             .expect("Failed to run command");
+
+        if !create_process_result.success() {
+            eprintln!("Failed to create container");
+            exit(1);
+        }
 
         let initial_enter_script = {
             if !self.config.root {
@@ -903,6 +910,7 @@ impl Context {
         match result.status.code() {
             Some(code) if code != 0 => {
                 eprintln!("A container with name '{}' does not exist", name);
+                eprintln!("{}", String::from_utf8_lossy(&result.stderr));
                 exit(1);
             }
             _ => {}
