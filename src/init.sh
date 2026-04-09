@@ -72,6 +72,7 @@ then
         echo "Installing sudo and su"
         if command -v apt >/dev/null 2>&1;
         then
+            export DEBIAN_FRONTEND=noninteractive
             apt update
             apt install -y sudo
         elif command -v dnf >/dev/null 2>&1;
