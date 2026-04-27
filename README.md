@@ -65,7 +65,7 @@ seabox create [options] <name>
     Setup passwordless sudo access for user in container.
     Note the security implications - this means software running in the container
     has passwordless access to root.
-    WARNING: Root in the container can modify the host system. Enabling this means
+    WARNING: Root in the container is root on the host. Enabling this means
     passwordless escalation to root on the host for programs in the container.
     Implies --no-password.
     Defaults to false.
