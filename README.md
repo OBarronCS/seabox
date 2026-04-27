@@ -124,7 +124,7 @@ Seabox will match a user in the container to correspond to the user on the host,
 
 Seabox uses Podman's [idmapped file mounts feature](https://github.com/containers/podman/issues/10374) to efficiently allow the "container user" to access mounted host files as if it had the "host user" id. This makes it so the "container user" maps to the "host user" when accessing and modifying mounted files. This requires rootful Podman (which also provides the container other capabilities such as binding ports less than 1024), which is invoked with `sudo podman`. This causes most `seabox` commands to prompt for sudo password.
 
-Idmapped file mounts has the advantage of avoiding a boot-up cost when instantiating an image for the first time. Other methods of matching file permissions so that a given container user can access the files of a given user (`--userns=keep-id`,`--uidmap`) need to [recursively `chown` the image file system](https://github.com/containers/podman/blob/43c95d2c0bdfc71d005e015fe93b3e7a48f39adf/vendor/github.com/containers/storage/drivers/chown.go#L72-L73) which takes significant time for large images.
+Idmapped file mounts has the advantage of avoiding a boot-up cost when instantiating an image for the first time. Other methods of matching file permissions so that a given container user can access the files of a given host user (`--userns=keep-id`,`--uidmap`) need to [recursively `chown` the image file system](https://github.com/containers/podman/blob/43c95d2c0bdfc71d005e015fe93b3e7a48f39adf/vendor/github.com/containers/storage/drivers/chown.go#L72-L73) which takes significant time for large images.
 
 
 ## Note on security
