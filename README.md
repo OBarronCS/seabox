@@ -1,6 +1,6 @@
 # Seabox
 
-Seabox is a wrapper around various `podman` commands that simplifies the creation of workspaces with the use of containers. It makes it simple to spin up environments with different Linux distributions that match the needs of the software you want to run. Need to compile something that depends on an old toolchain or want to test something without polluting your system? Use seabox to manage a development environment using any container image.
+Seabox is a wrapper around various `podman` commands that simplifies the creation of workspaces with the use of containers. It makes it simple to spin up isolated environments with your chosen Linux distribution. Need to compile something that depends on an old toolchain or want to test something without polluting your system? Use seabox to manage development environments that match the needs of the software you want to run.
 
 Seabox is modeled after [distrobox](https://github.com/89luca89/distrobox) and [toolbx](https://github.com/containers/toolbox), allowing you to instantiate OCI images for use as standalone environments with host integration. You can mount a directory, allowing file sharing with the host and the container. Seabox makes a couple adjustments compared to `distrobox` and `toolbx` - it uses rootful podman to run containers, is less tightly integrated with the host (such as no default mounting of root and home directories), and has minimal container initialization.
 
