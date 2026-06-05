@@ -131,6 +131,14 @@ Idmapped file mounts has the advantage of avoiding a boot-up cost when instantia
 Seabox uses rootful Podman, which means **root in the container is root on the host**. Do not run any software in these containers that you wouldn't run on your host. Root in the container can modify the host system - the container environment should be treated as providing convenient access to a root file system of a chosen Linux distribution with no security isolation to the host.
 
 
+## Fixes for network connection errors inside container
+
+If you find applications in the container being unable to resolve domains or connect to external addresses, there's two troubleshooting steps you can start with:
+
+(1) Restart the container with `seabox restart`. This will cause the `/etc/resolv.conf` file to sync with the host again, allowing domains names to resolve correctly. They can get out of sync if your host's `/etc/resolv.conf` changes after the container has started (which can occur, for example, when moving to a new WiFi network).
+
+(2) If this doesn't, work, try restarting the device. After a kernel update, often networking-related features of Podman/Docker will fail until the device reboots. This can manifest in new containers refusing to be created, or IPv6 not working inside containers while IPv4 still does.
+
 ## Configuration
 ```sh
 # Show location of config file
