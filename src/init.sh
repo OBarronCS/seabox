@@ -74,7 +74,7 @@ then
         then
             export DEBIAN_FRONTEND=noninteractive
             apt update
-            apt install -y sudo
+            apt install --no-install-recommends -y sudo
         elif command -v dnf >/dev/null 2>&1;
         then
             dnf install -y sudo su
