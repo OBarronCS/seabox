@@ -1,10 +1,11 @@
 use clap::{Args, Parser, Subcommand};
-use figment::Figment;
 use figment::providers::Env;
+use figment::Figment;
+use nix::libc::mount_attr;
 use std::collections::HashMap;
 use std::fs;
 use std::os::unix::process::CommandExt;
-use std::process::{Command, Stdio, exit};
+use std::process::{exit, Command, Stdio};
 
 const SEABOX_NAME: &str = "seabox";
 
@@ -684,6 +685,7 @@ impl Context {
                         self.config.install_sudo,
                         args.common.shell.clone(),
                         args.all.verbose,
+                        self.config.directory.clone(),
                     ),
                 ]
             } else {
@@ -1048,6 +1050,7 @@ impl Context {
                         self.config.install_sudo,
                         args.common.shell.clone(),
                         args.all.verbose,
+                        self.config.directory.clone(),
                     ),
                 ]
             } else {
@@ -1177,6 +1180,7 @@ fn create_initial_enter_script(
     install_sudo: Option<bool>,
     shell: Option<String>,
     verbose: bool,
+    mount_directory: Option<String>,
 ) -> String {
     let param_sudo_install_prompt = {
         match install_sudo {
@@ -1188,16 +1192,26 @@ fn create_initial_enter_script(
 
     let shell = shell.unwrap_or("".to_string());
 
+    let mount_directory = if mount_directory.is_some() {
+        "/mount/"
+    } else {
+        ""
+    };
+
     INIT_SCRIPT
-        .replace("INSERT_CREATE_USER", if create_user { "1" } else { "" })
-        .replace("INSERT_NEW_USERNAME", username)
-        .replace("INSERT_CONTAINER_ID", &container_user_id.to_string())
-        .replace("INSERT_SUDO_INSTALL", param_sudo_install_prompt)
+        .replace("#INSERT_CREATE_USER#", if create_user { "1" } else { "" })
+        .replace("#INSERT_NEW_USERNAME#", username)
+        .replace("#INSERT_CONTAINER_ID#", &container_user_id.to_string())
+        .replace("#INSERT_SUDO_INSTALL#", param_sudo_install_prompt)
         .replace(
-            "INSERT_PASSWORDLESS_SUDO",
+            "#INSERT_PASSWORDLESS_SUDO#",
             if passwordless_sudo { "1" } else { "" },
         )
-        .replace("INSERT_CREATE_PASSWORD", if no_password { "1" } else { "" })
-        .replace("INSERT_VERBOSE", if verbose { "1" } else { "" })
-        .replace("INSERT_SHELL", &shell)
+        .replace(
+            "#INSERT_CREATE_PASSWORD#",
+            if no_password { "1" } else { "" },
+        )
+        .replace("#INSERT_VERBOSE#", if verbose { "1" } else { "" })
+        .replace("#INSERT_SHELL#", &shell)
+        .replace("#INSERT_MOUNT_DIRECTORY#", mount_directory)
 }
