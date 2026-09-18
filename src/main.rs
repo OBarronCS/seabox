@@ -1,7 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 use figment::providers::Env;
 use figment::Figment;
-use nix::libc::mount_attr;
 use std::collections::HashMap;
 use std::fs;
 use std::os::unix::process::CommandExt;
