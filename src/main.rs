@@ -1,10 +1,12 @@
 use clap::{Args, Parser, Subcommand};
-use figment::providers::Env;
 use figment::Figment;
+use figment::providers::Env;
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::{ErrorKind, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
-use std::process::{exit, Command, Stdio};
+use std::process::{Command, Stdio, exit};
 
 const SEABOX_NAME: &str = "seabox";
 
@@ -34,7 +36,8 @@ export SHELL="$SHELL_PATH"
 exec "$SHELL_PATH""###,
 ];
 
-const INIT_SCRIPT: &str = include_str!("init.sh");
+const TEMPLATE_INIT_SCRIPT: &str = include_str!("init.sh");
+const TEMPLATE_EXPORT_SCRIPT: &str = include_str!("export-program.sh");
 
 struct Context {
     config: Config,
@@ -124,6 +127,7 @@ enum Commands {
     #[clap(visible_alias("ls"))]
     List(ListArgs),
     Restart(RestartArgs),
+    Export(ExportArgs),
     // #[clap(subcommand)]
     Config {
         #[command(subcommand)]
@@ -167,6 +171,19 @@ struct RemoveArgs {
 #[derive(Args)]
 struct RestartArgs {
     names: Vec<String>,
+
+    #[command(flatten)]
+    all: AllCommandArgs,
+}
+
+#[derive(Args)]
+struct ExportArgs {
+    name: String,
+
+    command: String,
+
+    #[arg(short, long, default_value = "false")]
+    force: bool,
 
     #[command(flatten)]
     all: AllCommandArgs,
@@ -294,6 +311,8 @@ struct PodmanContainerInspectFormat {
 struct MountType {
     #[serde(rename = "Source")]
     source: String,
+    #[serde(rename = "Destination")]
+    destination: String,
 }
 #[derive(serde::Deserialize)]
 struct StateType {
@@ -382,6 +401,7 @@ impl Context {
             }
             Some(Commands::List(args)) => self.handle_list(args),
             Some(Commands::Restart(args)) => self.handle_restart(args),
+            Some(Commands::Export(args)) => self.handle_export(args),
             Some(Commands::Config {
                 inner: Some(ConfigSubcommand::Show),
             }) => self.handle_config_show(),
@@ -901,39 +921,43 @@ impl Context {
         let container_inspect_command = self.generate_container_inspect_command(name);
         let container_start_command = self.generate_container_start_command(name);
 
-        let result = std::process::Command::new(&container_inspect_command[0])
+        let container_inspect_result = std::process::Command::new(&container_inspect_command[0])
             .args(&container_inspect_command[1..])
             .stderr(Stdio::piped())
             .stdout(Stdio::piped())
             .output()
             .expect("Failed to run command");
 
-        match result.status.code() {
+        match container_inspect_result.status.code() {
             Some(code) if code != 0 => {
                 eprintln!("A container with name '{}' does not exist", name);
-                eprintln!("{}", String::from_utf8_lossy(&result.stderr));
+                eprintln!(
+                    "{}",
+                    String::from_utf8_lossy(&container_inspect_result.stderr)
+                );
                 exit(1);
             }
             _ => {}
         }
 
-        let stdout_text = String::from_utf8_lossy(&result.stdout);
+        let stdout_text = String::from_utf8_lossy(&container_inspect_result.stdout);
         let info: Vec<PodmanContainerInspectFormat> =
             serde_json::from_str(&stdout_text).expect("JSON parse error");
 
         let workdir: String = {
             if !info[0].mounts.is_empty() {
                 let host_dir = &info[0].mounts[0].source;
-                let absolute_path =
+                let host_dir_absolute_path =
                     std::path::absolute(host_dir).expect("Couldn't make path absolute");
 
                 let current_dir =
                     std::env::current_dir().expect("Current working directory not found");
                 let current_dir = current_dir.to_str().unwrap();
-                let cwd_path =
+                let cwd_path_absolute_path =
                     std::path::absolute(current_dir).expect("Couldn't make path absolute");
-                let relative_path = cwd_path
-                    .strip_prefix(absolute_path)
+
+                let relative_path = cwd_path_absolute_path
+                    .strip_prefix(host_dir_absolute_path)
                     .ok()
                     .and_then(|x| x.to_str())
                     .unwrap_or("")
@@ -1152,6 +1176,85 @@ impl Context {
         }
     }
 
+    fn handle_export(&self, args: &ExportArgs) {
+        // Places a shell script wrapper into ~/.local/bin/
+
+        let container_inspect_command = self.generate_container_inspect_command(&args.name);
+
+        let container_inspect_result = std::process::Command::new(&container_inspect_command[0])
+            .args(&container_inspect_command[1..])
+            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
+            .output()
+            .expect("Failed to run command");
+
+        match container_inspect_result.status.code() {
+            Some(code) if code != 0 => {
+                eprintln!("A container with name '{}' does not exist", args.name);
+                eprintln!(
+                    "{}",
+                    String::from_utf8_lossy(&container_inspect_result.stderr)
+                );
+                exit(1);
+            }
+            _ => {}
+        }
+
+        let stdout_text = String::from_utf8_lossy(&container_inspect_result.stdout);
+        let info: Vec<PodmanContainerInspectFormat> =
+            serde_json::from_str(&stdout_text).expect("JSON parse error");
+
+        let host_dir = &info[0].mounts[0].source;
+        let container_dir = &info[0].mounts[0].destination;
+        let host_dir_absolute_path =
+            std::path::absolute(host_dir).expect("Couldn't make path absolute");
+
+        let export_script = create_export_script(
+            &args.name,
+            host_dir_absolute_path.to_str().unwrap(),
+            container_dir,
+            &args.command,
+        );
+
+        if args.all.dry_run {
+            print_command(container_inspect_command.clone());
+        }
+
+        // Create
+        let target_dir = std::env::home_dir()
+            .expect("no home dir")
+            .join(".local/bin");
+
+        let target_path = target_dir.join(&args.command);
+
+        if args.force {
+            match fs::remove_file(&target_path) {
+                Ok(()) => println!("Overwriting existing {}", target_path.display()),
+                Err(e) if e.kind() == ErrorKind::NotFound => {}
+                Err(e) => eprintln!("Failed to remove {}: {e}", target_path.display()),
+            }
+        }
+
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o755)
+            .open(&target_path)
+        {
+            Ok(mut f) => {
+                if let Err(e) = f.write_all(export_script.as_bytes()) {
+                    eprintln!("Failed to write {}: {e}", target_path.display());
+                }
+            }
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                eprintln!("{} already exists", target_path.display());
+            }
+            Err(e) => {
+                eprintln!("Failed to create {}: {e}", target_path.display());
+            }
+        }
+    }
+
     fn handle_config_show(&self) {
         let cfg = get_configuration_file_path();
 
@@ -1197,7 +1300,7 @@ fn create_initial_enter_script(
         ""
     };
 
-    INIT_SCRIPT
+    TEMPLATE_INIT_SCRIPT
         .replace("#INSERT_CREATE_USER#", if create_user { "1" } else { "" })
         .replace("#INSERT_NEW_USERNAME#", username)
         .replace("#INSERT_CONTAINER_ID#", &container_user_id.to_string())
@@ -1213,4 +1316,17 @@ fn create_initial_enter_script(
         .replace("#INSERT_VERBOSE#", if verbose { "1" } else { "" })
         .replace("#INSERT_SHELL#", &shell)
         .replace("#INSERT_MOUNT_DIRECTORY#", mount_directory)
+}
+
+fn create_export_script(
+    container_name: &str,
+    host_dir: &str,
+    container_dir: &str,
+    command_name: &str,
+) -> String {
+    TEMPLATE_EXPORT_SCRIPT
+        .replace("#INSERT_CONTAINER_NAME#", container_name)
+        .replace("#INSERT_MOUNT_HOST_DIR#", host_dir)
+        .replace("#INSERT_MOUNT_CONTAINER_DIR#", container_dir)
+        .replace("#INSERT_COMMAND_NAME#", command_name)
 }
