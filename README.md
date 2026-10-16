@@ -116,7 +116,7 @@ Export a program from within the container, so that the host can execute it.
 seabox export <name> <command_name>
 ```
 
-This creates a small wrapper script in `~/.local/bin/command_name` on the host that executes the program within the container. This can be a convenient way to install a bunch of tools in a distro where things are pre-packed in the package repositories, and then you can export all of them so that the host can run them.
+This creates a small wrapper script in `~/.local/bin/command_name` on the host that executes the program within the container. This can be a convenient way to install a bunch of tools in a distro where the tools are prepackaged in the package repositories (and therefore easy to install), and then you can export all of them so that the host can run them.
 
 All commands accessibles to the container user can be exported. This includes tools installed within the container user's home directory. In other words, if you can run the command while in an interactive shell within the container, it will be accessible via `seabox export` as well. To do this, the wrapper script will first run any shell-initialization scripts (such as `.bashrc`) for the container user, so that the `$PATH` variable for the user is fully initialized. For example, if inside the container, you have a tool in `/home/ubuntu/my-tool-directory/bin/my-tool`, as long as the `ubuntu` user's `.bashrc` adds `$HOME/my-tool-directory/bin` to its `$PATH`, `seabox export` will find it.
 
