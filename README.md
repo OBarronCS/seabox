@@ -13,7 +13,7 @@ cargo install --git https://github.com/OBarronCS/seabox.git
 ```sh
 # Create a container named "dev"
 ## This will mount the current working directory to /mount/ in the container
-seabox create dev -i docker.io/dokken/ubuntu-25.04 -d .
+seabox create dev -i docker.io/dokken/ubuntu-26.04 -d .
 
 # List containers created with seabox
 seabox ls
@@ -170,7 +170,7 @@ You can puts settings in a config file to choose the default values of the comma
 This is an example config file that contains all the currently available options. All options are optional.
 ```toml
 # Choose the default container image to use
-image = "docker.io/dokken/ubuntu-25.04"
+image = "docker.io/dokken/ubuntu-26.04"
 
 # Override default directory on the host to correspond to /mount in the container
 # This defaults to the current directory when invoking seabox  
@@ -199,7 +199,7 @@ unsafe_setup_passwordless_sudo = false
 
 # You can also apply per-image settings like this.
 # These take precedence over global settings
-["docker.io/dokken/ubuntu-25.04:latest"]
+["docker.io/dokken/ubuntu-26.04:latest"]
 unsafe_setup_passwordless_sudo = true
 
 ["docker.io/library/busybox:latest"]
